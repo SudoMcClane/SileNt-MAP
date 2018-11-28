@@ -6,14 +6,16 @@ import os
 import subprocess
 import time
 
-parser = ArgumentParser()
+parser = ArgumentParser(prog="nmap_launcher.py", description="Launch multiple port scans on multiple IP ranges one after another")
 
-parser.add_argument("-i", "--ips", help="File with IPs/IP ranges to scan (one per line)")
-parser.add_argument("-p", "--ports", help="File with port list to scan (one per line: '80', '443' or '8000-8010')")
-parser.add_argument("-n", "--number", default=5, help="Number of Ports/Port ranges to scan at the same time")
-parser.add_argument("-d", "--delay", default=0, help="Pause between two scans (in seconds)")
+parser.add_argument("-i", "--ips", metavar="FILENAME", help="File with IPs/IP ranges to scan (one per line)")
+parser.add_argument("-p", "--ports", metavar="FILENAME", help="File with port list to scan (one per line: '80', '443' or '8000-8010')")
+parser.add_argument("-n", "--number", default=5, type=int, help="Number of Ports/Port ranges to scan at the same time")
+parser.add_argument("-d", "--delay", default=0, type=int, help="Pause between two scans (in seconds)")
 parser.add_argument("-v", "--verbose", default=False, action="store_true", help="Show additional messages")
-parser.add_argument("-o", "--output", default="nmap_results", help="Directory name for scan results")
+parser.add_argument("type", choices={'oN', 'oX', 'oS', 'oG', 'oA'}, default='oA', help="Output type (See Nmap manpage)")
+parser.add_argument("-f", "--format", metavar="STRING", default="%s-p%s", help='Output filenames format (STRING °/. (ip, port))')
+parser.add_argument("-o", "--output", metavar="DIRECTORY", default="nmap_results", help="Directory name for scan results")
 
 args = parser.parse_args()
 
@@ -45,7 +47,7 @@ while portrange != "":
         if args.verbose:
             print("Starting scanning %s" % iprange)
 
-        subprocess.call(['nmap', '-v', '-Pn', '-sS', iprange, '-p', portrange, '-oA', os.path.join(args.output, iprange.replace("/", "-") + "-p" + portrange.replace("-", "--").replace(",", "-"))])
+        subprocess.call(['nmap', '-v', '-Pn', '-sS', iprange, '-p', portrange, "-" + args.type , os.path.join(args.output, args.format % (iprange.replace("/", "-"), portrange.replace("-", "--").replace(",", "-")))])
 
         if args.verbose:
             print("%s scanned" % iprange)
