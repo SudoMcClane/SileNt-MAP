@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from argparse 	import ArgumentParser
+import argparse
 import os
 import subprocess
 import time
 
 # Parsing arguments
-
-parser = ArgumentParser(prog="nmap_launcher.py",
+parser = argparse.ArgumentParser(prog="nmap_launcher.py",
         description="Launch multiple port scans on multiple IP ranges one after another")
 
 parser.add_argument("-i", "--ips", metavar="FILENAME",
         help="File with IPs/IP ranges to scan (one per line)")
 parser.add_argument("-p", "--ports", metavar="FILENAME",
-        help="File with port list to scan (one per line: '80', '443' or '8000-8010')")
+        help="File with port list to scan (one per line: '80', 'T:443' or '8000-8010')")
 parser.add_argument("-n", "--number", default=5, type=int,
         help="Number of Ports/Port ranges to scan at the same time")
 parser.add_argument("-d", "--delay", default=0, type=int,
@@ -22,16 +21,17 @@ parser.add_argument("-d", "--delay", default=0, type=int,
 parser.add_argument("-v", "--verbose", default=False, action="store_true",
         help="Show additional messages")
 parser.add_argument("type", choices={'oN', 'oX', 'oS', 'oG', 'oA'}, default='oA',
-    help="Output type (See Nmap manpage)")
+        help="Output type (See Nmap manpage)")
 parser.add_argument("-f", "--format", metavar="STRING", default="%s-p%s",
         help='Output filenames format (STRING °/. (ip, port))')
 parser.add_argument("-o", "--output", metavar="DIRECTORY", default="nmap_results",
         help="Directory name for scan results")
+parser.add_argument("additional", nargs=argparse.REMAINDER,
+        help="Additional arguments for nmap")
 
 args = parser.parse_args()
 
 # Check that IPs and Ports lists exist and ask for the filenames if needed
-
 while args.ips is None or not os.path.exists(args.ips):
     args.ips = raw_input("Enter the path of the file with IPs/IP ranges to scan: ")
 
@@ -39,12 +39,10 @@ while args.ports is None or not os.path.exists(args.ports):
     args.ports = raw_input("Enter the path of the file with Ports/Port ranges to scan: ")
 
 # Create the output directory
-
 if not os.path.exists(args.output):
     if args.verbose:
         print("Creating %s directory" % args.output)
     os.makedirs(args.output)
-
 
 portfile = open(args.ports, "r")
 
@@ -65,9 +63,9 @@ while portrange != "":                      # Until the is no port left
             print("Starting scanning %s" % iprange)
 
         # Call Nmap
-        subprocess.call(['nmap', '-v', '-Pn', '-sS', iprange, '-p', portrange, "-" + args.type,
+        subprocess.call(['nmap', iprange, '-p', portrange, "-" + args.type,
             os.path.join(args.output, args.format % (iprange.replace("/", "-"),
-                portrange.replace("-", "--").replace(",", "-")))])
+                portrange.replace("-", "--").replace(",", "-")))] + args.additional)
 
         if args.verbose:
             print("%s scanned" % iprange)

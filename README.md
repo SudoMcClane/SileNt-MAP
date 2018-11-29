@@ -13,20 +13,21 @@ and then increased the ports list.
 ```
 usage: nmap_launcher.py [-h] [-i FILENAME] [-p FILENAME] [-n NUMBER]
                         [-d DELAY] [-v] [-f STRING] [-o DIRECTORY]
-                        {oA,oN,oS,oG,oX}
+                        {oX,oN,oG,oA,oS} ...
 
 Launch multiple port scans on multiple IP ranges one after another
 
 positional arguments:
-  {oA,oN,oS,oG,oX}      Output type (See Nmap manpage)
+  {oX,oN,oG,oA,oS}      Output type (See Nmap manpage)
+  additional            Additional arguments for nmap
 
 optional arguments:
   -h, --help            show this help message and exit
   -i FILENAME, --ips FILENAME
                         File with IPs/IP ranges to scan (one per line)
   -p FILENAME, --ports FILENAME
-                        File with port list to scan (one per line: '80', '443'
-                        or '8000-8010')
+                        File with port list to scan (one per line: '80',
+			'T:443' or '8000-8010')
   -n NUMBER, --number NUMBER
                         Number of Ports/Port ranges to scan at the same time
   -d DELAY, --delay DELAY
