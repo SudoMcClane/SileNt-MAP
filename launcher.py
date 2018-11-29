@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+from termcolor import colored
 import os
 import subprocess
 import time
@@ -41,7 +42,7 @@ while args.ports is None or not os.path.exists(args.ports):
 # Create the output directory
 if not os.path.exists(args.output):
     if args.verbose:
-        print("Creating %s directory" % args.output)
+        print(colored("[i] Creating %s directory", 'yellow') % args.output)
     os.makedirs(args.output)
 
 portfile = open(args.ports, "r")
@@ -54,21 +55,25 @@ while portrange != "":                      # Until the is no port left
             break
         portrange += "," + line.replace(os.linesep, "")
     if args.verbose:
-        print("Starting scanning ports %s" % portrange)
+        print(colored("[i] Starting scanning ports %s", 'yellow') % portrange)
 
     ipfile = open(args.ips, "r")
     for iprange in ipfile:                  # Until every IP has been scanned
         iprange = iprange.replace(os.linesep, "")
-        if args.verbose:
-            print("Starting scanning %s" % iprange)
 
         # Call Nmap
-        subprocess.call(['nmap', iprange, '-p', portrange, "-" + args.type,
-            os.path.join(args.output, args.format % (iprange.replace("/", "-"),
-                portrange.replace("-", "--").replace(",", "-")))] + args.additional)
+        command = ['nmap', iprange, '-p', portrange, "-" + args.type,
+                os.path.join(args.output, args.format % (iprange.replace("/", "-"),
+                    portrange.replace("-", "--").replace(",", "-")))] + args.additional
+                
+        if args.verbose:
+            print(colored("[+] Starting scanning %s:%s", 'yellow') % (iprange, portrange))
+            print(colored(' '.join(command), 'white', 'on_blue'))
+        
+        subprocess.call(command)
 
         if args.verbose:
-            print("%s scanned" % iprange)
+            print(colored("[+] %s:%s scanned", 'green') % (iprange, portrange))
 
         time.sleep(int(args.delay))
     ipfile.close()
@@ -76,3 +81,6 @@ while portrange != "":                      # Until the is no port left
     portrange = portfile.readline().replace(os.linesep, "")
 
 portfile.close()
+
+if args.verbose:
+    print(colored("[+] Scan finished", 'green'))

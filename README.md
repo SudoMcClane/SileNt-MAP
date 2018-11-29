@@ -8,6 +8,11 @@ We needed to launch scans for open ports on multiple IP ranges without
 multithreading. To do so we first scanned most common ports on every IP range
 and then increased the ports list.
 
+## Prerequisites
+
+* [python3](https://www.python.org/downloads/)
+* [termcolor](https://pypi.org/project/termcolor/)
+
 ## Help
 
 ```
