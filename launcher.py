@@ -6,6 +6,7 @@ from termcolor import colored
 import netifaces
 import os
 import queue
+from random import shuffle
 import socket
 import subprocess
 import sys
@@ -34,6 +35,10 @@ def ParseArgs():
             help='Output filenames format (STRING °/. (ip, port))')
     parser.add_argument("-o", "--output", metavar="DIRECTORY", default="nmap_results",
             help="Directory name for scan results")
+    parser.add_argument("--random", default=False, action="store_true",
+            help="Perform scans in a random order")
+    parser.add_argument("--simulate", default=False, action="store_true",
+            help="Do not actually scan")
     parser.add_argument("-e", "--dev", metavar="DEVICE", default="eth0",
             help="Network interface to use")
     parser.add_argument("--spoof-ip", metavar="FILENAME",
@@ -139,7 +144,7 @@ def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
 
 
 # Nmap calling function
-def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose, \
+def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose, simulate, \
         iface=None, ip=None, mac=None):
 
     # Output filename
@@ -163,7 +168,8 @@ def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose, \
     
     stdout = open(outFile + ".stdout", "wb")
     stderr = open(outFile + ".stderr", "wb")
-    subprocess.call(command, stdout=stdout, stderr=stderr)
+    if not simulate:
+        subprocess.call(command, stdout=stdout, stderr=stderr)
     stdout.close()
     stderr.close()
 
@@ -175,7 +181,8 @@ def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose, \
 # Class for multithreaded scans
 class iFaceThread (threading.Thread):
 
-    def __init__(self, id, ip, scanQueue, lock, type, outDir, outFormat, args, verbose, iface, mac):
+    def __init__(self, id, ip, scanQueue, lock, type, outDir, outFormat, args, verbose, iface, mac, \
+            delay, simulate):
         threading.Thread.__init__(self)
         self.id = id
         self.ip = ip
@@ -188,6 +195,8 @@ class iFaceThread (threading.Thread):
         self.verbose = verbose
         self.iface = iface
         self.mac = mac
+        self.delay = delay
+        self.simulate = simulate
 
     def run(self):
 
@@ -225,9 +234,11 @@ class iFaceThread (threading.Thread):
             portrange = item[1]
 
             CallNmap(iprange, portrange, self.type, self.outDir, self.outFormat, self.args, \
-                    self.verbose, dev, self.ip, self.mac)
+                    self.verbose, self.simulate, dev, self.ip, self.mac)
 
             self.scanQueue.task_done()
+
+            time.sleep(int(self.delay))
 
 
 # Funcion creating ip/port couples to scan
@@ -238,7 +249,7 @@ def createScanQueue(ipFile, portFile, verbose):
         print(colored("[i] Creating Scan Queue%s", 'yellow') % os.linesep)
 
     # create lists
-    res = queue.Queue()
+    res = []
     ips = []
 
     # read files
@@ -251,7 +262,7 @@ def createScanQueue(ipFile, portFile, verbose):
         portRange = portRange.strip(os.linesep)
 
         for ipRange in ips:
-            res.put([ipRange, portRange])
+            res += [[ipRange, portRange]]
 
             # Verbose output
             if verbose:
@@ -264,10 +275,9 @@ def createScanQueue(ipFile, portFile, verbose):
 
     return res
 
-
 # Create and launch Threads
-def launchThreads(ipFile, portFile, spoofIPFile, spoofMACFile, dev, type, outDir, outFormat, \
-        args, verbose):
+def launchThreads(queueList, spoofIPFile, spoofMACFile, dev, type, delay, outDir, outFormat, \
+        args, random, verbose, simulate):
     
     # Backup IP/MAC
     ipBack = netifaces.ifaddresses(dev)[netifaces.AF_INET][0]['addr'] + "/" \
@@ -277,21 +287,23 @@ def launchThreads(ipFile, portFile, spoofIPFile, spoofMACFile, dev, type, outDir
     # retrieve source IPs
     ips = GetIPs(dev, spoofMACFile, spoofIPFile, verbose)
 
-    queue = createScanQueue(ipFile, portFile, verbose)
+    q = queue.Queue()
+    for couple in queueList:
+        q.put(couple)
 
     threads = []
     i = 0
     for couple in ips:
-        t = iFaceThread(i, couple[1], queue, None, type, outDir, outFormat, args, verbose, dev, \
-                couple[0])
+        t = iFaceThread(i, couple[1], q, None, type, outDir, outFormat, args, verbose, dev, \
+                couple[0], delay, simulate)
         i = i + 1
         threads.append(t)
         t.start()
         # Add 'None' at the end of the queue to stop the thread
-        queue.put(None)
+        q.put(None)
 
     # Wait for threads
-    queue.join()
+    q.join()
     
     # Restore IP/MAC backup
     subprocess.call(["ip", "link", "set", "down", "dev", dev])
@@ -313,54 +325,46 @@ def Main():
             print(colored("[i] Creating %s directory", 'yellow') % args.output)
         os.makedirs(args.output)
 
+    portFile = open(args.ports, "r")            # already checked in ParseArgs()
+    ipFile = open(args.ips, "r")
+
+    queueList = createScanQueue(ipFile, portFile, args.verbose)
+
+    # randomize
+    if args.random:
+        shuffle(queueList)
+
+        # verbose output
+        if args.verbose:
+            print(colored("[!] Scan queue randomized", "yellow"))
+
+    # cleaning
+    portFile.close()
+    ipFile.close()
+
+
     # Case multithread
     if args.spoof_ip:
-        portFile = open(args.ports, "r")            # already checked in ParseArgs()
-        ipFile = open(args.ips, "r")
         if not os.path.isfile(args.spoof_ip):
             os.mknod(args.spoof_ip)
         spoofIPFile = open(args.spoof_ip, "r+")
         spoofMacFile = open(args.spoof_mac, "r")
 
-        launchThreads(ipFile, portFile, spoofIPFile, spoofMacFile, args.dev, args.type, \
-                args.output, args.format, args.additional, args.verbose)
+        launchThreads(queueList, spoofIPFile, spoofMacFile, args.dev, args.type, args.delay, \
+                args.output, args.format, args.additional, args.random, args.verbose, args.simulate)
 
         # Cleaning
-        portFile.close()
-        ipFile.close()
         spoofIPFile.close()
         spoofMacFile.close()
 
     # Case not threaded
     else:
-        portFile = open(args.ports, "r")            # already checked in ParseArgs()
+        for couple in queueList:
+            # Call Nmap
+            CallNmap(couple[0], couple[1], args.type, args.output, args.format, args.additional, \
+                    args.verbose, args.simulate)
 
-        portrange = portFile.readline().rstrip(os.linesep)
-        while portrange != "":                      # Until there is no port left
-            for i in range(1, int(args.number)):    # Concatenate ports ex: "80,443,8010-8020"
-                line = portFile.readline()
-                if line == "":
-                    break
-                portrange += "," + line.rstrip(os.linesep)
-
-            # Verbose output
-            if args.verbose:
-                print(colored("[i] Starting scanning ports %s", 'yellow') % portrange)
-
-            ipFile = open(args.ips, "r")
-            for iprange in ipFile:                  # Until every IP has been scanned
-                iprange = iprange.replace(os.linesep, "")
-
-                # Call Nmap
-                CallNmap(iprange, portrange, args.type, args.output, args.format, args.additional, \
-                        args.verbose)
-
-                time.sleep(int(args.delay))
-            ipFile.close()
-
-            portrange = portFile.readline().replace(os.linesep, "")
-
-        portFile.close()
+            time.sleep(int(args.delay))
 
     # Verbose output
     if args.verbose:
