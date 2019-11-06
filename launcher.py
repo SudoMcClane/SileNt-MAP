@@ -7,69 +7,121 @@ import netifaces
 import os
 import queue
 from random import shuffle
-import socket
 import subprocess
 import sys
 import threading
 import time
 
+
+def printBanner():
+    """Print the program banner in the standard output
+    """
+    banner = ('  ██████  ██▓ ██▓    ▓█████  ███▄    █ ▄▄▄█████▓    ███▄ ▄███▓ '
+              '▄▄▄       ██▓███  ' + os.linesep +
+              '▒██    ▒ ▓██▒▓██▒    ▓█   ▀  ██ ▀█   █ ▓  ██▒ ▓▒   ▓██▒▀█▀ ██▒▒'
+              '████▄    ▓██░  ██▒' + os.linesep +
+              '░ ▓██▄   ▒██▒▒██░    ▒███   ▓██  ▀█ ██▒▒ ▓██░ ▒░   ▓██    ▓██░▒'
+              '██  ▀█▄  ▓██░ ██▓▒' + os.linesep +
+              '  ▒   ██▒░██░▒██░    ▒▓█  ▄ ▓██▒  ▐▌██▒░ ▓██▓ ░    ▒██    ▒██ ░'
+              '██▄▄▄▄██ ▒██▄█▓▒ ▒' + os.linesep +
+              '▒██████▒▒░██░░██████▒░▒████▒▒██░   ▓██░  ▒██▒ ░    ▒██▒   ░██▒ '
+              '▓█   ▓██▒▒██▒ ░  ░' + os.linesep +
+              '▒ ▒▓▒ ▒ ░░▓  ░ ▒░▓  ░░░ ▒░ ░░ ▒░   ▒ ▒   ▒ ░░      ░ ▒░   ░  ░ '
+              '▒▒   ▓▒█░▒▓▒░ ░  ░' + os.linesep +
+              '░ ░▒  ░ ░ ▒ ░░ ░ ▒  ░ ░ ░  ░░ ░░   ░ ▒░    ░       ░  ░      ░ '
+              ' ▒   ▒▒ ░░▒ ░     ' + os.linesep +
+              '░  ░  ░   ▒ ░  ░ ░      ░      ░   ░ ░   ░         ░      ░    '
+              ' ░   ▒   ░░       ' + os.linesep +
+              '      ░   ░      ░  ░   ░  ░         ░                    ░    '
+              '     ░  ░         ' + os.linesep)
+    print("{0}{1}{0}".format(os.linesep, colored(banner, "green")))
+
+
 def ParseArgs():
+    """Convert argument strings to objects and assign them as attributes of the
+    namespace. Return the populated namespace.
 
-    # Parsing arguments
-    parser = argparse.ArgumentParser(prog="nmap_launcher.py",
-            description="Launch multiple port scans on multiple IP ranges one after another")
+    Returns
+    -------
+    namespace
+        Namespace populated with argument string object.
+    """
 
-    parser.add_argument("-i", "--ips", metavar="FILENAME",
-            help="File with IPs/IP ranges to scan (one per line)")
-    parser.add_argument("-p", "--ports", metavar="FILENAME",
-            help="File with port list to scan (one per line: '80', 'T:443' or '8000-8010')")
-    parser.add_argument("-n", "--number", default=5, type=int,
-            help="Number of Ports/Port ranges to scan at the same time")
+    parser = argparse.ArgumentParser(prog="launcher.py",
+                                     description="Launch multiple port scans \
+                                     on multiple IP ranges one after another")
+
+    parser.add_argument("-i", "--ips", metavar="FILENAME", help="File with \
+                        IPs/IP ranges to scan (one per line)")
+    parser.add_argument("-p", "--ports", metavar="FILENAME", help="File with \
+                        port list to scan (one per line: '80', 'T:443' or \
+                        '8000-8010')")
     parser.add_argument("-d", "--delay", default=0, type=int,
-            help="Pause between two scans (in seconds)")
+                        help="Pause between two scans (in seconds)")
     parser.add_argument("-v", "--verbose", default=False, action="store_true",
-            help="Show additional messages")
-    parser.add_argument("type", choices={'oN', 'oX', 'oS', 'oG', 'oA'}, default='oA',
-            help="Output type (See Nmap manpage)")
+                        help="Show additional messages")
+    parser.add_argument("type", choices={'oN', 'oX', 'oS', 'oG', 'oA'},
+                        default='oA', help="Output type (See Nmap manpage)")
     parser.add_argument("-f", "--format", metavar="STRING", default="%s-p%s",
-            help='Output filenames format (STRING °/. (ip, port))')
-    parser.add_argument("-o", "--output", metavar="DIRECTORY", default="nmap_results",
-            help="Directory name for scan results")
+                        help="Output filenames format (STRING %% (ip, port))")
+    parser.add_argument("-o", "--output", metavar="DIRECTORY",
+                        default="nmap_results",
+                        help="Directory name for scan results")
     parser.add_argument("--random", default=False, action="store_true",
-            help="Perform scans in a random order")
+                        help="Perform scans in a random order")
     parser.add_argument("--simulate", default=False, action="store_true",
-            help="Do not actually scan")
+                        help="Do not actually scan")
     parser.add_argument("-e", "--dev", metavar="DEVICE", default="eth0",
-            help="Network interface to use")
-    parser.add_argument("--spoof-ip", metavar="FILENAME",
-            help="File containing IP addresses used as source for Nmap (one per line). \
-                    Retrieved using DHCP if empty")
-    parser.add_argument("--spoof-mac", metavar="FILENAME",
-            help="File containing MAC addresses used as source for Nmap (one per line)")
-    parser.add_argument("additional", nargs=argparse.REMAINDER, \
-            help="Additional arguments for nmap")
+                        help="Network interface to use")
+    parser.add_argument("--spoof-ip", metavar="FILENAME", help="File \
+                        containing IP addresses used as source for Nmap (one \
+                        per line). Retrieved using DHCP if empty")
+    parser.add_argument("--spoof-mac", metavar="FILENAME", help="File \
+                        containing MAC addresses used as source for Nmap (one \
+                        per line)")
+    parser.add_argument("additional", nargs=argparse.REMAINDER,
+                        help="Additional arguments for Nmap")
 
     args = parser.parse_args()
 
     # Check that spoof-ip and spoof-file are specified or None
     if (args.spoof_ip is None) != (args.spoof_mac is None):
-        print(colored("[-] Fatal error: --spoof-ip and --spof-mac options must be used together", \
-                'red'))
+        print(colored("[-] Fatal error: --spoof-ip and --spoof-mac options \
+                      must be used together", 'red'))
         parser.print_usage()
         exit(1)
 
     # Check that IPs and Ports lists exist and ask for the filenames if needed
     while args.ips is None or not os.path.exists(args.ips):
-        args.ips = input("Enter the path of the file with IPs/IP ranges to scan: ")
+        args.ips = input("Enter the path of the file with IPs/IP ranges to \
+                         scan: ")
 
     while args.ports is None or not os.path.exists(args.ports):
-        args.ports = input("Enter the path of the file with Ports/Port ranges to scan: ")
+        args.ports = input("Enter the path of the file with Ports/Port ranges \
+                           to scan: ")
 
     return args
 
 
-# Retrieves IPs either in the provided file, or using DHCP
-def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
+def GetIPs(devName, spoofMACFile, spoofIPFile, verbose=False):
+    """Retrieves IPs either in the provided file, or using DHCP
+
+    Parameters
+    ----------
+    devName : string
+        Ethernet device name (ex.: "eth0")
+    spoofMACFile : file
+        File containing MAC addresses to spoof
+    spoofIPFile : file
+        File containing IP addresses to spoof
+    verbose : bool
+        Enable verbosity (default=False)
+
+    Returns
+    -------
+    [[string, string]]
+        MAC / IP addresses couples retrieved
+    """
 
     ips = []
 
@@ -81,10 +133,11 @@ def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
 
         # Remove trailing cariage return
         macAddress = macAddress.rstrip(os.linesep)
-            
+
         # Verbose output
         if verbose:
-            print(colored("[i] MAC retrieved from file: %s", 'yellow') % macAddress)
+            print(colored("[i] MAC retrieved from file: %s", 'yellow')
+                  % macAddress)
 
         if prevIPs:
 
@@ -105,10 +158,12 @@ def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
 
             # Verbose output
             if verbose:
-                print(colored("[i] Setting %s as MAC address", 'yellow') % macAddress)
+                print(colored("[i] Setting %s as MAC address", 'yellow')
+                      % macAddress)
 
             # ip link set dev eth0 address AA:BB:CC:DD:EE:FF
-            subprocess.call(["ip", "link", "set", "dev", devName, "address", macAddress])
+            subprocess.call(["ip", "link", "set", "dev", devName, "address",
+                             macAddress])
 
             # Verbose output
             if verbose:
@@ -124,8 +179,9 @@ def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
             # dhclient eth0
             subprocess.call(["dhclient", devName])
             # Retrieving IP address
-            ip = netifaces.ifaddresses(devName)[netifaces.AF_INET][0]['addr'] + "/" \
-                    + netifaces.ifaddresses(devName)[netifaces.AF_INET][0]['netmask']
+            ip = netifaces.ifaddresses(devName)[netifaces.AF_INET][0]['addr'] \
+                + "/" + \
+                netifaces.ifaddresses(devName)[netifaces.AF_INET][0]['netmask']
 
             # Save IPs in the file
             spoofIPFile.write(ip + os.linesep)
@@ -136,7 +192,8 @@ def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
 
         # Verbose output
         if verbose:
-            print(colored("[+] IP - MAC couple: %s - %s", 'green') % (ip, macAddress))
+            print(colored("[+] IP - MAC couple: %s - %s", 'green')
+                  % (ip, macAddress))
 
         ips.append([macAddress, ip])
 
@@ -144,28 +201,68 @@ def GetIPs(devName, spoofMACFile, spoofIPFile, verbose):
 
 
 # Nmap calling function
-def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose, simulate, \
-        iface=None, ip=None, mac=None):
+def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose=False,
+             simulate=False, iface=None, ip=None, mac=None):
+    """Call Nmap with arguments.
+
+    Parameters
+    ----------
+    iprange : string
+        IP range to scan (ex.: "192.168.0.1/24")
+    portrange : string
+        Ports to scan (ex.: "80,T:443,8080-8090")
+    type : string
+        Nmap output format ("oG", "oS", "oA", "oX" or "oN")
+    outDir : string
+        Directory name for scan results
+    outFormat : string
+        Output filenames format (STRING % (ip, port))
+    args : [string]
+        Additional arguments for Nmap
+    verbose : bool
+        Enable verbosity (default=False)
+    verbose : bool
+        Enable verbosity (default=False)
+    verbose : bool
+        Enable verbosity (default=False)
+    verbose : bool
+        Enable verbosity (default=False)
+    verbose : bool
+        Enable verbosity (default=False)
+    verbose : bool
+        Enable verbosity (default=False)
+
+    Returns
+    -------
+    [[string, string]]
+        MAC / IP addresses couples retrieved
+    """
 
     # Output filename
-    outFile = os.path.join(outDir, outFormat % (iprange.replace("/", "-"),
-                portrange.replace("-", "--").replace(",", "-")))
+    outFile = os.path.join(outDir,
+                           outFormat
+                           % (iprange.replace("/", "-"),
+                              portrange.replace("-", "--").replace(",", "-")))
 
     # Call Nmap
     if iface is None or ip is None:
-        command = ['nmap', iprange, '-p', portrange, "-" + type, outFile] + args
+        command = ['nmap', iprange, '-p', portrange, "-" + type, outFile] \
+                 + args
     elif mac is None:
-        command = ['nmap', iprange, '-p', portrange, "-" + type, outFile, "-e", iface, "-S", \
-                ip.split('/')[0]] + args
+        command = ['nmap', iprange, '-p', portrange, "-" + type, outFile,
+                   "-e", iface, "-S", ip.split('/')[0]] \
+                 + args
     else:
-        command = ['nmap', iprange, '-p', portrange, "-" + type, outFile, "-e", iface, "-S", \
-                ip.split('/')[0], "--spoof-mac", mac] + args
+        command = ['nmap', iprange, '-p', portrange, "-" + type, outFile,
+                   "-e", iface, "-S", ip.split('/')[0], "--spoof-mac", mac] \
+                 + args
 
     # Verbose output
     if verbose:
-        print(colored("[+] Starting scanning %s:%s", 'yellow') % (iprange, portrange))
+        print(colored("[+] Starting scanning %s:%s", 'yellow')
+              % (iprange, portrange))
         print(colored(' '.join(command), 'white', 'on_blue'))
-    
+
     stdout = open(outFile + ".stdout", "wb")
     stderr = open(outFile + ".stderr", "wb")
     if not simulate:
@@ -181,8 +278,8 @@ def CallNmap(iprange, portrange, type, outDir, outFormat, args, verbose, simulat
 # Class for multithreaded scans
 class iFaceThread (threading.Thread):
 
-    def __init__(self, id, ip, scanQueue, lock, type, outDir, outFormat, args, verbose, iface, mac, \
-            delay, simulate):
+    def __init__(self, id, ip, scanQueue, lock, type, outDir, outFormat, args,
+                 verbose, iface, mac, delay, simulate):
         threading.Thread.__init__(self)
         self.id = id
         self.ip = ip
@@ -202,22 +299,21 @@ class iFaceThread (threading.Thread):
 
         # Create interface
         dev = self.iface
-        
+
         # Quick & Dirty fix for -Pn & --spoof-mac incompatibility
         if "-Pn" in self.args:
             self.mac = None
-        
+
         # Verbose output
         if self.verbose:
-            print(colored("[i] Setting %s as MAC address", 'yellow') % self.mac)
+            print(colored("[i] Setting %s as MAC address", 'yellow')
+                  % self.mac)
 
         # ip link set dev eth0 address AA:BB:CC:DD:EE:FF
         subprocess.call(["ip", "address", "add", self.ip, "dev", dev])
 
         while not self.scanQueue.empty():
-            #lock.acquire()
             item = self.scanQueue.get()
-            #lock.release()
 
             # Queue ends with "None"s
             if item is None:
@@ -225,16 +321,18 @@ class iFaceThread (threading.Thread):
 
                 # Verbose output
                 if self.verbose:
-                    print(colored("[i] Stopping thread for interface %s/%s", 'yellow') \
-                            % (self.ip, self.mac))
+                    print(colored("[i] Stopping thread for interface %s/%s",
+                                  'yellow')
+                          % (self.ip, self.mac))
 
                 break
 
             iprange = item[0]
             portrange = item[1]
 
-            CallNmap(iprange, portrange, self.type, self.outDir, self.outFormat, self.args, \
-                    self.verbose, self.simulate, dev, self.ip, self.mac)
+            CallNmap(iprange, portrange, self.type, self.outDir,
+                     self.outFormat, self.args, self.verbose, self.simulate,
+                     dev, self.ip, self.mac)
 
             self.scanQueue.task_done()
 
@@ -266,8 +364,8 @@ def createScanQueue(ipFile, portFile, verbose):
 
             # Verbose output
             if verbose:
-                print(colored("  Ip(s):\t%s%s  Port(s):\t%s%s", 'yellow') \
-                        % (ipRange, os.linesep, portRange, os.linesep))
+                print(colored("  Ip(s):\t%s%s  Port(s):\t%s%s", 'yellow')
+                      % (ipRange, os.linesep, portRange, os.linesep))
 
     # Verbose output
     if verbose:
@@ -275,10 +373,11 @@ def createScanQueue(ipFile, portFile, verbose):
 
     return res
 
+
 # Create and launch Threads
-def launchThreads(queueList, spoofIPFile, spoofMACFile, dev, type, delay, outDir, outFormat, \
-        args, random, verbose, simulate):
-    
+def launchThreads(queueList, spoofIPFile, spoofMACFile, dev, type, delay,
+                  outDir, outFormat, args, random, verbose, simulate):
+
     # Backup IP/MAC
     ipBack = netifaces.ifaddresses(dev)[netifaces.AF_INET][0]['addr'] + "/" \
             + netifaces.ifaddresses(dev)[netifaces.AF_INET][0]['netmask']
@@ -294,8 +393,8 @@ def launchThreads(queueList, spoofIPFile, spoofMACFile, dev, type, delay, outDir
     threads = []
     i = 0
     for couple in ips:
-        t = iFaceThread(i, couple[1], q, None, type, outDir, outFormat, args, verbose, dev, \
-                couple[0], delay, simulate)
+        t = iFaceThread(i, couple[1], q, None, type, outDir, outFormat, args,
+                        verbose, dev, couple[0], delay, simulate)
         i = i + 1
         threads.append(t)
         t.start()
@@ -304,7 +403,7 @@ def launchThreads(queueList, spoofIPFile, spoofMACFile, dev, type, delay, outDir
 
     # Wait for threads
     q.join()
-    
+
     # Restore IP/MAC backup
     subprocess.call(["ip", "link", "set", "down", "dev", dev])
     subprocess.call(["ip", "link", "set", "dev", dev, "address", macBack])
@@ -317,6 +416,8 @@ def Main():
 
     args = ParseArgs()
 
+    printBanner()
+
     # Create the output directory
     if not os.path.exists(args.output):
 
@@ -325,7 +426,7 @@ def Main():
             print(colored("[i] Creating %s directory", 'yellow') % args.output)
         os.makedirs(args.output)
 
-    portFile = open(args.ports, "r")            # already checked in ParseArgs()
+    portFile = open(args.ports, "r")        # already checked in ParseArgs()
     ipFile = open(args.ips, "r")
 
     queueList = createScanQueue(ipFile, portFile, args.verbose)
@@ -342,7 +443,6 @@ def Main():
     portFile.close()
     ipFile.close()
 
-
     # Case multithread
     if args.spoof_ip:
         if not os.path.isfile(args.spoof_ip):
@@ -350,8 +450,10 @@ def Main():
         spoofIPFile = open(args.spoof_ip, "r+")
         spoofMacFile = open(args.spoof_mac, "r")
 
-        launchThreads(queueList, spoofIPFile, spoofMacFile, args.dev, args.type, args.delay, \
-                args.output, args.format, args.additional, args.random, args.verbose, args.simulate)
+        launchThreads(queueList, spoofIPFile, spoofMacFile, args.dev,
+                      args.type, args.delay,  args.output, args.format,
+                      args.additional, args.random, args.verbose,
+                      args.simulate)
 
         # Cleaning
         spoofIPFile.close()
@@ -361,8 +463,8 @@ def Main():
     else:
         for couple in queueList:
             # Call Nmap
-            CallNmap(couple[0], couple[1], args.type, args.output, args.format, args.additional, \
-                    args.verbose, args.simulate)
+            CallNmap(couple[0], couple[1], args.type, args.output, args.format,
+                     args.additional, args.verbose, args.simulate)
 
             time.sleep(int(args.delay))
 
