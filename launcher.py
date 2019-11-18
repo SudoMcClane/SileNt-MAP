@@ -495,7 +495,7 @@ def Main():
     if args.beautiful:
         verbose = False
         beauty = beautiful.Data()
-        printer = beautiful.printer(beauty)
+        printer = beautiful.Printer(beauty)
         printer.start()
     else:
         printBanner()
